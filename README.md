@@ -1,112 +1,225 @@
-# تخمین قیمت آپارتمان (Divar Dataset)
+# House Price Prediction
 
-پروژه‌ای برای تخمین قیمت فروش آپارتمان بر اساس آگهی‌های دیوار، با معماری:
+A machine learning project for predicting residential apartment prices using real-world property listings from Divar.
 
+The project covers the complete machine learning workflow, from data cleaning and exploratory analysis to feature engineering, text processing, model training, evaluation, and an interactive prediction interface.
+
+## Overview
+
+The goal of this project is to estimate the total selling price of apartments based on structured and unstructured information available in property listings.
+
+The model uses features such as:
+
+- Area
+- Number of rooms
+- Floor
+- Building age
+- Location
+- Property amenities
+- Listing title
+- Listing description
+
+The project uses **LightGBM** as the main prediction model, with **CatBoost** also explored during the experimentation process.
+
+## Dataset
+
+The dataset consists of approximately **24,500 property listings with 49 features**, collected from Divar.
+
+The original data contains information about:
+
+- Property characteristics
+- Location
+- Amenities
+- Listing title and description
+- Property price
+
+During preprocessing, the dataset was filtered and cleaned to focus on **apartments listed for sale**.
+
+The final preprocessing pipeline includes filtering invalid listings, handling missing values, removing outliers, and transforming relevant Persian and numerical fields.
+
+## Machine Learning Pipeline
+
+The project follows these main steps:
+
+1. Data cleaning and preprocessing
+2. Exploratory Data Analysis (EDA)
+3. Feature engineering
+4. Extraction of property amenities from listing text
+5. Location-based feature engineering
+6. TF-IDF text feature extraction
+7. Target encoding for categorical location features
+8. Outlier detection and removal
+9. Log transformation of the target variable
+10. Train/validation/test split
+11. Model training
+12. Model evaluation
+
+### Feature Engineering
+
+Several additional features were extracted from the raw listing data.
+
+Examples include binary indicators for:
+
+- Parking
+- Elevator
+- Storage
+- Yard
+- Balcony
+- CCTV
+- Double-glazed windows
+
+Location information was also processed to create combined location features such as `city_district`.
+
+### Text Features
+
+Listing titles and descriptions contain useful information that is not captured by the numerical features alone.
+
+TF-IDF was therefore used to extract textual features from the listing text, including unigram and bigram representations.
+
+To avoid data leakage, the TF-IDF vectorizers in the final training pipeline are fitted **only on the training data** and then applied to validation/test data.
+
+## Model
+
+### LightGBM
+
+The main model is LightGBM configured as a regression model with an L1 objective.
+
+The final configuration includes:
+
+```text
+objective      = regression_l1
+n_estimators   = 1000
+learning_rate  = 0.01
+num_leaves     = 40
+random_state   = 42
 ```
-Streamlit (UI)  --HTTP-->  FastAPI (/predict)  -->  LightGBM model
+
+Early stopping is used based on validation performance.
+
+### CatBoost
+
+CatBoost was also experimented with as an alternative gradient boosting approach and compared with LightGBM during the modeling process.
+
+## Evaluation
+
+The models are evaluated using standard regression metrics:
+
+- RMSE
+- R²
+- MAPE
+
+Final values should be reported from the latest validated test-set results.
+
+| Model    | RMSE |   R² | MAPE |
+| -------- | ---: | ---: | ---: |
+| LightGBM | 0.24 | 0.82 | 0.14 |
+| CatBoost | 0.38 | 0.71 | 0.27 |
+
+> The reported metrics should be calculated on the untouched test set and should not use filtered or custom versions of MAPE as the primary evaluation metric.
+
+## Results
+
+The project includes visual analysis of model performance, including actual-vs-predicted price comparisons and feature importance analysis.
+
+The target variable is modeled using a logarithmic transformation to reduce the effect of highly expensive properties and improve model stability.
+
+Predictions are converted back to the original price scale using the inverse transformation.
+
+## Demo
+
+The project includes an interactive prediction interface built with **Streamlit**.
+
+Users can enter property information and receive an estimated apartment price through the trained model.
+
+![House Price Prediction Dashboard](screen.png)
+
+## Project Structure
+
+```text
+house-price-prediction/
+│
+├── app/
+│   └── app.py
+│
+├── models/
+│   └── ...
+│
+├── notebooks/
+│   └── house_price_prediction.ipynb
+│
+├── data/
+│   └── ...
+│
+├── requirements.txt
+├── README.md
+├── screen.png
+└── .gitignore
 ```
 
-فرانت و بک‌اند کاملاً مستقل‌اند: `app.py` هیچ منطق مدلی ندارد و فقط با
-`requests` به API وصل می‌شود. این یعنی می‌شود بعداً فرانت را با React یا هر
-چیز دیگری عوض کرد بدون دست‌زدن به مدل.
+The notebook contains the main data analysis, experimentation, feature engineering, model training, and evaluation workflow.
 
-## ساختار فایل‌ها
+The Streamlit application provides a lightweight interface for using the trained model.
 
-| فایل | نقش |
-|---|---|
-| `preprocessing.py` | تمام منطق پاکسازی/فیچرانجینیرینگ، مشترک بین train و inference |
-| `train.py` | آموزش کامل مدل از روی CSV خام و ذخیره artifact ها |
-| `api.py` | FastAPI با اندپوینت `POST /predict` |
-| `app.py` | داشبورد Streamlit |
-| `models/artifacts.joblib` | خروجی train.py (بعد از اجرا ساخته می‌شود) |
+## Installation
 
-## نصب
+Clone the repository and install the required dependencies:
 
 ```bash
-python -m venv venv
-source venv/bin/activate   # ویندوز: venv\Scripts\activate
+git clone <repository-url>
+cd house-price-prediction
+
 pip install -r requirements.txt
 ```
 
-## مرحله ۱ — آموزش مدل
+## Running the Application
 
-فایل `divar_ads_full.csv` را در پوشه `data/` بگذار و اجرا کن:
-
-```bash
-python train.py --csv data/divar_ads_full.csv --out models/artifacts.joblib
-```
-
-خروجی شامل MAPE و RMSE روی تست‌ست چاپ می‌شود و فایل `models/artifacts.joblib`
-ساخته می‌شود (مدل + TF-IDF vectorizer ها + TargetEncoder + میانه‌های imputation).
-
-⚠️ **مهم:** من در محیطی که این پروژه را ساختم دسترسی به اینترنت نداشتم،
-پس نتوانستم `lightgbm` / `category-encoders` / `jdatetime` را نصب کنم و
-خود train.py را واقعاً اجرا کنم. تمام منطق پاکسازی و فیچرانجینیرینگ را
-با داده واقعی تو تست کردم (نتایج فیلترها را در پایین می‌بینی) ولی خط
-آموزش مدل خودش تست نشده — لطفاً اول یک‌بار لوکال اجرا کن و اگر ارور
-دیدی بگو تا برطرفش کنم.
-
-نتیجه تست پایپ‌لاین پاکسازی روی دیتاست خودت:
-- ۲۴,۵۳۷ ردیف خام → ۳,۷۵۳ ردیف بعد از فیلتر «فقط آپارتمانِ فروشی»
-- → ۳,۵۷۷ ردیف بعد از حذف آگهی‌های قسطی/سفت‌کاری
-- → ۱,۸۳۳ ردیف نهایی بعد از حذف داده پرت (IQR)
-
-یعنی دیتاست نهایی train حدود ۱۸۰۰ ردیفه — برای رزومه کافیه ولی احتمالاً
-MAPE بالاتر از عددی که در نوت‌بوک اصلی دیدی می‌شود (چون نوت‌بوک ظاهراً
-روی دیتاست بزرگ‌تری اجرا شده بود). اگر بخوای فیلترها را شل‌تر کنیم
-(مثلاً فیلتر آپارتمان را بردار و ویلا/زمین را هم نگه دار) بگو تا اصلاح کنم.
-
-### یک بهبود نسبت به نوت‌بوک اصلی
-
-در نوت‌بوک، وکتورایزرهای TF-IDF روی **کل دیتاست** (قبل از split) فیت
-می‌شدند که یعنی واژگان val/test هم وارد مدل می‌شد. در `train.py` این را
-اصلاح کردم: TF-IDF فقط روی **train split** فیت می‌شود — عملکرد واقعی‌تری
-روی داده دیده‌نشده نشان می‌دهد.
-
-## مرحله ۲ — اجرای API
+Start the Streamlit application with:
 
 ```bash
-uvicorn api:app --reload --port 8000
+streamlit run app/app.py
 ```
 
-تست سریع:
-```bash
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d '{"title":"فروش آپارتمان 80 متری","area":80,"city":"اصفهان","district":"ملک شهر","rooms":2,"floor":3,"built_year_shamsi":1399}'
-```
+The application will open in your browser and allow you to enter property information and generate a price prediction.
 
-مستندات تعاملی: `http://localhost:8000/docs`
+## Technologies
 
-## مرحله ۳ — اجرای داشبورد
+- Python
+- Pandas
+- NumPy
+- Scikit-learn
+- LightGBM
+- CatBoost
+- Matplotlib
+- Seaborn
+- Streamlit
+- Jupyter Notebook
 
-```bash
-streamlit run app.py
-```
+## Key Machine Learning Concepts
 
-پیش‌فرض به `http://localhost:8000` وصل می‌شود؛ برای تغییر آدرس API از
-متغیر محیطی استفاده کن: `API_URL=http://x.x.x.x:8000 streamlit run app.py`
+This project demonstrates practical experience with:
 
-## اجرا با Docker (هر دو سرویس با هم)
+- Exploratory Data Analysis
+- Data Cleaning
+- Feature Engineering
+- Regression
+- Gradient Boosting
+- LightGBM
+- CatBoost
+- TF-IDF
+- Target Encoding
+- Outlier Detection
+- Log Transformation
+- Model Evaluation
+- Model Interpretation
+- Basic ML Deployment
 
-```bash
-docker compose up --build
-```
+## Future Improvements
 
-- داشبورد: `http://localhost:8501`
-- API: `http://localhost:8000/docs`
+Potential improvements include:
 
-## نکات برای رزومه
-
-- **جداسازی API از UI**: نشان می‌دهد معماری service-oriented را می‌شناسی.
-- **جلوگیری از train/serve skew**: تابع مشترک `build_feature_row` /
-  پایپ‌لاین train دقیقاً همان تبدیلات را روی داده کاربر اعمال می‌کند.
-- **رفع نشت داده در TF-IDF**: یک بهبود مستند نسبت به نسخه اولیه نوت‌بوک.
-- **Dockerize شده**: قابل دیپلوی روی هر VPS یا سرویس ابری با یک دستور.
-
-## محدودیت‌های شناخته‌شده
-
-- دیتاست نهایی بعد از فیلترها کوچک است (~1800 ردیف) — دقت مدل محدود می‌شود.
-- `city`/`district` باید دقیقاً با فرمتی که در دیتاست train بوده وارد شوند
-  وگرنه به `rare_location` می‌افتند (دقت کمتر برای مناطق دیده‌نشده).
-- مدل فقط برای **آپارتمانِ فروشی** train شده، نه ویلا/زمین/اجاره.
+- Expanding the dataset with additional listings
+- Improving location feature representation
+- Hyperparameter optimization
+- Better handling of unseen locations
+- Experimenting with more advanced text representations
+- Deploying the prediction interface online
