@@ -1,49 +1,112 @@
-# House Price Prediction
+# تخمین قیمت آپارتمان (Divar Dataset)
 
-A machine learning project for predicting residential property prices
-using gradient boosting models.
+پروژه‌ای برای تخمین قیمت فروش آپارتمان بر اساس آگهی‌های دیوار، با معماری:
 
-## Overview
+```
+Streamlit (UI)  --HTTP-->  FastAPI (/predict)  -->  LightGBM model
+```
 
-...
+فرانت و بک‌اند کاملاً مستقل‌اند: `app.py` هیچ منطق مدلی ندارد و فقط با
+`requests` به API وصل می‌شود. این یعنی می‌شود بعداً فرانت را با React یا هر
+چیز دیگری عوض کرد بدون دست‌زدن به مدل.
 
-## Dataset
+## ساختار فایل‌ها
 
-...
+| فایل | نقش |
+|---|---|
+| `preprocessing.py` | تمام منطق پاکسازی/فیچرانجینیرینگ، مشترک بین train و inference |
+| `train.py` | آموزش کامل مدل از روی CSV خام و ذخیره artifact ها |
+| `api.py` | FastAPI با اندپوینت `POST /predict` |
+| `app.py` | داشبورد Streamlit |
+| `models/artifacts.joblib` | خروجی train.py (بعد از اجرا ساخته می‌شود) |
 
-## Approach
+## نصب
 
-- Exploratory Data Analysis
-- Missing Value Handling
-- Feature Engineering
-- Categorical Encoding
-- Model Training
-- Hyperparameter Tuning
+```bash
+python -m venv venv
+source venv/bin/activate   # ویندوز: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-## Models
+## مرحله ۱ — آموزش مدل
 
-- LightGBM
-- CatBoost
+فایل `divar_ads_full.csv` را در پوشه `data/` بگذار و اجرا کن:
 
-## Results
+```bash
+python train.py --csv data/divar_ads_full.csv --out models/artifacts.joblib
+```
 
-| Model | MAE | RMSE | R² |
-|---|---:|---:|---:|
-| LightGBM | ... | ... | ... |
-| CatBoost | ... | ... | ... |
+خروجی شامل MAPE و RMSE روی تست‌ست چاپ می‌شود و فایل `models/artifacts.joblib`
+ساخته می‌شود (مدل + TF-IDF vectorizer ها + TargetEncoder + میانه‌های imputation).
 
-## Demo
+⚠️ **مهم:** من در محیطی که این پروژه را ساختم دسترسی به اینترنت نداشتم،
+پس نتوانستم `lightgbm` / `category-encoders` / `jdatetime` را نصب کنم و
+خود train.py را واقعاً اجرا کنم. تمام منطق پاکسازی و فیچرانجینیرینگ را
+با داده واقعی تو تست کردم (نتایج فیلترها را در پایین می‌بینی) ولی خط
+آموزش مدل خودش تست نشده — لطفاً اول یک‌بار لوکال اجرا کن و اگر ارور
+دیدی بگو تا برطرفش کنم.
 
-[Live Demo]
+نتیجه تست پایپ‌لاین پاکسازی روی دیتاست خودت:
+- ۲۴,۵۳۷ ردیف خام → ۳,۷۵۳ ردیف بعد از فیلتر «فقط آپارتمانِ فروشی»
+- → ۳,۵۷۷ ردیف بعد از حذف آگهی‌های قسطی/سفت‌کاری
+- → ۱,۸۳۳ ردیف نهایی بعد از حذف داده پرت (IQR)
 
-## Installation
+یعنی دیتاست نهایی train حدود ۱۸۰۰ ردیفه — برای رزومه کافیه ولی احتمالاً
+MAPE بالاتر از عددی که در نوت‌بوک اصلی دیدی می‌شود (چون نوت‌بوک ظاهراً
+روی دیتاست بزرگ‌تری اجرا شده بود). اگر بخوای فیلترها را شل‌تر کنیم
+(مثلاً فیلتر آپارتمان را بردار و ویلا/زمین را هم نگه دار) بگو تا اصلاح کنم.
 
-...
+### یک بهبود نسبت به نوت‌بوک اصلی
 
-## Usage
+در نوت‌بوک، وکتورایزرهای TF-IDF روی **کل دیتاست** (قبل از split) فیت
+می‌شدند که یعنی واژگان val/test هم وارد مدل می‌شد. در `train.py` این را
+اصلاح کردم: TF-IDF فقط روی **train split** فیت می‌شود — عملکرد واقعی‌تری
+روی داده دیده‌نشده نشان می‌دهد.
 
-...
+## مرحله ۲ — اجرای API
 
-## Project Structure
+```bash
+uvicorn api:app --reload --port 8000
+```
 
-...
+تست سریع:
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"title":"فروش آپارتمان 80 متری","area":80,"city":"اصفهان","district":"ملک شهر","rooms":2,"floor":3,"built_year_shamsi":1399}'
+```
+
+مستندات تعاملی: `http://localhost:8000/docs`
+
+## مرحله ۳ — اجرای داشبورد
+
+```bash
+streamlit run app.py
+```
+
+پیش‌فرض به `http://localhost:8000` وصل می‌شود؛ برای تغییر آدرس API از
+متغیر محیطی استفاده کن: `API_URL=http://x.x.x.x:8000 streamlit run app.py`
+
+## اجرا با Docker (هر دو سرویس با هم)
+
+```bash
+docker compose up --build
+```
+
+- داشبورد: `http://localhost:8501`
+- API: `http://localhost:8000/docs`
+
+## نکات برای رزومه
+
+- **جداسازی API از UI**: نشان می‌دهد معماری service-oriented را می‌شناسی.
+- **جلوگیری از train/serve skew**: تابع مشترک `build_feature_row` /
+  پایپ‌لاین train دقیقاً همان تبدیلات را روی داده کاربر اعمال می‌کند.
+- **رفع نشت داده در TF-IDF**: یک بهبود مستند نسبت به نسخه اولیه نوت‌بوک.
+- **Dockerize شده**: قابل دیپلوی روی هر VPS یا سرویس ابری با یک دستور.
+
+## محدودیت‌های شناخته‌شده
+
+- دیتاست نهایی بعد از فیلترها کوچک است (~1800 ردیف) — دقت مدل محدود می‌شود.
+- `city`/`district` باید دقیقاً با فرمتی که در دیتاست train بوده وارد شوند
+  وگرنه به `rare_location` می‌افتند (دقت کمتر برای مناطق دیده‌نشده).
+- مدل فقط برای **آپارتمانِ فروشی** train شده، نه ویلا/زمین/اجاره.
